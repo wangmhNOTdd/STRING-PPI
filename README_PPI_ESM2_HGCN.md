@@ -13,36 +13,37 @@
 
 ---
 
-## 2. Repo Structure 目录结构
+## 2. Repo Structure 目录结构（当前仓库）
 
 ```
-ppi-esm2-hgcn/
-├─ data/
-│  └─ string/              # STRING 数据集
-│     ├─ raw/              # 原始下载 (STRING .gz / .fa.gz)
-│     ├─ interim/          # 中间文件（映射、过滤前后对齐）
-│     └─ processed/        # 最终图与特征 (graph.pt / features.pt / splits.npz)
-├─ models/
-│  ├─ manifolds/           # Poincaré/Hyperboloid ops (expmap/logmap/Möbius 等)
-│  ├─ layers/              # HGCN 层实现
-│  └─ decoders/            # 双曲距离/内积解码器
-├─ src/
-│  ├─ download_string.py   # 下载与校验
-│  ├─ preprocess_string.py # 过滤、ID 映射、序列对齐
-│  ├─ embed_esm2.py        # 生成 ESM2 表征并缓存
-│  ├─ build_graph.py       # 构图、负采样、数据划分
-│  ├─ train.py             # 训练入口（HGCN/GCN）
-│  ├─ evaluate.py          # 统一评测与可视化
-│  └─ utils.py             # 公共工具（日志、种子、IO、metrics）
+.
+├─ README_PPI_ESM2_HGCN.md
 ├─ configs/
-│  ├─ data.yaml            # 数据路径&过滤阈值
-│  ├─ model.yaml           # HGCN/GCN 配置（维度、层数、曲率等）
-│  ├─ train.yaml           # 优化器、学习率、批大小、负采样比等
-│  └─ esm2.yaml            # ESM2 变体与推理批次
-├─ tests/                  # 单元测试（数据对齐、几何运算正确性）
-├─ notebooks/              # EDA / 可视化（可选）
-├─ README.md               # 本文件
-└─ LICENSE
+│  ├─ data.yaml
+│  ├─ esm2.yaml
+│  ├─ model.yaml
+│  └─ train.yaml
+├─ data/
+│  ├─ SHS27K/                      # 另一个数据集（如不使用可忽略）
+│  └─ string/
+│     ├─ raw/                      # 已下载的 STRING v12.0 人类 9606 文件
+│     ├─ interim/                  # 预处理输出：nodes.tsv / edges.tsv / seqs.fasta
+│     └─ processed/                # 最终图与特征：esm2_features.npz / graph.pt / node_id_to_idx.npy
+├─ models/
+│  ├─ decoders/
+│  ├─ layers/
+│  └─ manifolds/
+├─ runs/
+│  └─ hgcn_esm2_700/
+│     └─ best.pt                   # 训练保存的最佳权重
+└─ src/
+  ├─ build_graph.py               # 构图、负采样、划分并输出 graph.pt
+  ├─ download_string.py           # 占位（当前为空）
+  ├─ embed_esm2.py                # 生成 ESM2 表征并保存 .npz
+  ├─ evaluate.py                  # 占位（当前为空）
+  ├─ preprocess_string.py         # 过滤、ID 映射、序列对齐
+  ├─ train.py                     # 训练入口（含简单评估与保存 best.pt）
+  └─ utils.py
 ```
 
 ---
@@ -69,7 +70,17 @@ ppi-esm2-hgcn/
 
 ## 4. Environment 环境与依赖
 
-已有环境
+最小依赖（当前代码已验证）
+- Python 3.9+
+- pytorch + torch-geometric（按官方指引安装相应 CUDA 版本）
+- transformers, tokenizers
+- biopython, pandas, numpy, scikit-learn, tqdm
+
+示例（CPU，仅示意，具体以你本机/显卡选择为准）
+```powershell
+pip install pandas numpy scikit-learn tqdm biopython transformers
+# 按 https://pytorch-geometric.readthedocs.io/ 的说明安装 torch 和 pyg
+```
 ---
 
 ## 5. Data Pipeline 数据流水线
@@ -97,13 +108,14 @@ python src/preprocess_string.py \
 ```bash
 python src/embed_esm2.py \
   --fasta data/string/interim/seqs.fasta \
-  --esm2_variant esm2_t33_650M_UR50D \
-  --batch_size 4 \
-  --fp16 \
+  --esm2_variant esm2_t12_35M_UR50D \
+  --batch_size 16 \
+  --pooling mean \
+  --device cuda \
   --out_npz data/string/processed/esm2_features.npz
 ```
-- 默认采用 **[CLS] token 表征** 或 **mean-pooling**（可配置）；    
-- 保留 `id -> feature` 的顺序与映射。
+- 支持 `--pooling mean|cls`；建议资源有限用 `esm2_t12_35M_UR50D`。
+- 输出 `esm2_features.npz`，包含 `keys`（序列 ID 顺序）与 `embeddings`（对齐矩阵）。
 
 ### 5.4 构图与负采样 + 数据划分
 ```bash
@@ -123,6 +135,9 @@ python src/build_graph.py \
 - **划分策略**：
   - `transductive`：所有节点可见，仅边划分（常见）；
   - `inductive`：留出部分节点（其相关边为 val/test），考察模型在新蛋白上的泛化。
+
+生成文件：`data/string/processed/graph.pt` 与 `node_id_to_idx.npy`。
+注意：划分 mask 已包含在 `graph.pt` 中（`train_mask/val_mask/test_mask`），不再单独导出 `splits.npz`。
 
 ---
 
@@ -172,16 +187,8 @@ python src/train.py \
 视情况调整
 
 ### 7.2 评测
-```bash
-python src/evaluate.py \
-  --data_dir data/string/processed \
-  --ckpt runs/hgcn_esm2_700/best.pt \
-  --metrics auroc aupr f1@0.5 \
-  --report reports/hgcn_esm2_700.json
-```
-- **指标**：AUROC、AUPRC、F1@阈值、PR/ROC 曲线；  
-- **置信阈值**：可通过验证集最大化 F1/Youden’s J 来选取；  
-- **统计显著**：多次种子运行并报告均值±方差。
+- 当前 `src/evaluate.py` 为占位空文件；训练脚本已在每个 epoch 输出验证/测试集损失与准确率，并将 `val_loss` 最优权重保存到 `runs/.../best.pt`。
+- 如需更丰富指标（AUROC/AUPRC/F1），后续可在 `evaluate.py` 中补充；或在 `train.py` 的 `evaluate_model` 基础上扩展 sklearn/torchmetrics。
 
 
 ---
@@ -214,10 +221,10 @@ drop_no_sequence: true
 
 `configs/esm2.yaml`
 ```yaml
-variant: esm2_t12_35M_UR50D   # 资源有限可选小模型
+variant: esm2_t12_35M_UR50D   # 嵌入脚本不直接读取该文件，仅供参考
 pooling: mean                 # or cls
 batch_size: 16
-fp16: true
+device: cuda
 ```
 
 `configs/model.yaml`
@@ -244,29 +251,30 @@ val_ratio: 0.1
 test_ratio: 0.2
 seed: 42
 ```
+说明：当前代码仅在 `train.py` 中读取 `configs/model.yaml` 的少量键（如 `dim`）；其余 YAML 文件为参考配置，未被脚本自动消费。
 
 ---
 
 ## 10. CLI Examples 命令汇总
 
 ```bash
-# 1) Download
-python src/download_string.py --species 9606 --out_dir data/string/raw
+# 1) Download（已下载可跳过；当前 download_string.py 为空占位）
+# 手动从 STRING 下载人类 9606 所需 4 个文件到 data/string/raw/
+# https://stringdb-downloads.org/ （v12.0）
 
 # 2) Preprocess
 python src/preprocess_string.py --raw_dir data/string/raw --interim_dir data/string/interim --min_score 900 --map_to ensp --drop_no_sequence
 
 # 3) ESM2 embeddings
-python src/embed_esm2.py --fasta data/string/interim/seqs.fasta --esm2_variant esm2_t12_35M_UR50D --batch_size 16 --fp16 --out_npz data/string/processed/esm2_features.npz
+python src/embed_esm2.py --fasta data/string/interim/seqs.fasta --esm2_variant esm2_t12_35M_UR50D --batch_size 16 --pooling mean --device cuda --out_npz data/string/processed/esm2_features.npz
 
 # 4) Build graph & splits
 python src/build_graph.py --nodes data/string/interim/nodes.tsv --edges data/string/interim/edges.tsv --features data/string/processed/esm2_features.npz --neg_ratio 1 --split transductive --val_ratio 0.1 --test_ratio 0.2 --out_dir data/string/processed
 
 # 5) Train HGCN
 python src/train.py --config configs/model.yaml --data_dir data/string/processed --epochs 100 --lr 1e-3 --batch_size 8192 --model hgcn --decoder hyp_distance --log_dir runs/hgcn_esm2_700
-
-# 6) Evaluate
-python src/evaluate.py --data_dir data/string/processed --ckpt runs/hgcn_esm2_700/best.pt --metrics auroc aupr f1@0.5 --report reports/hgcn_esm2_700.json
+# 6) Evaluate（占位）
+# 评测脚本待补充，目前以训练日志与 best.pt 为准
 ```
 
 ---
