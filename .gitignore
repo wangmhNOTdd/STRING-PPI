@@ -63,28 +63,27 @@ pip-delete-this-directory.txt
 # Unit test / coverage reports
 htmlcov/
 .tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
+# ==============================================================================
+# .gitignore for STRING-PPI Project
+# ==============================================================================
 
-# Translations
-*.mo
-*.pot
+# Data files - 数据文件
+# 仅保留 `data/string/processed/` 到仓库，其它原始/中间文件忽略
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+# 忽略原始下载和中间处理数据（本地保留，禁止提交）
+data/string/raw/
+data/string/interim/
+data/string/.download_complete
 
-# Flask stuff:
+# 保留 processed 目录及其内容（要被上传）
+!data/string/processed/
+!data/string/processed/**
+
+# 保留README文件以说明数据结构
+!data/string/README.md
+!data/README.md
+
+# ==============================================================================
 instance/
 .webassets-cache
 
@@ -141,28 +140,25 @@ venv.bak/
 .ropeproject
 
 # mkdocs documentation
-/site
+# ======================================================================
+# .gitignore for STRING-PPI Project
+# ======================================================================
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+# Data files - 数据文件
+# 忽略原始下载和中间处理数据（本地保留，禁止提交）
+data/string/raw/
+data/string/interim/
+data/string/.download_complete
 
-# Pyre type checker
-.pyre/
+# 保留 processed 目录及其内容（需要上传到仓库）
+!data/string/processed/
+!data/string/processed/**
 
-# ==============================================================================
-# Machine Learning / AI specific
-# ==============================================================================
-# 模型权重文件
-*.pth
-*.pt
-*.h5
-*.hdf5
-*.pkl
-*.pickle
+# 保留用于说明的数据 README
+!data/string/README.md
+!data/README.md
 
-# TensorBoard logs
+# ======================================================================
 runs/
 logs/
 tensorboard/
