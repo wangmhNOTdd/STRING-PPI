@@ -144,19 +144,8 @@ venv.bak/
 # .gitignore for STRING-PPI Project
 # ======================================================================
 
-# Data files - 数据文件
-# 忽略原始下载和中间处理数据（本地保留，禁止提交）
-data/string/raw/
-data/string/interim/
-data/string/.download_complete
-
-# 保留 processed 目录及其内容（需要上传到仓库）
-!data/string/processed/
-!data/string/processed/**
-
-# 保留用于说明的数据 README
-!data/string/README.md
-!data/README.md
+# 忽略整个 data 目录（不将任何 data 文件纳入版本控制）
+data/
 
 # ======================================================================
 runs/
