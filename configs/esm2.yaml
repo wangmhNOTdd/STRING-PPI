@@ -1,0 +1,4 @@
+variant: esm2_t12_35M_UR50D
+pooling: mean
+batch_size: 16
+fp16: true

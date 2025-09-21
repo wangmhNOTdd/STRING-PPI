@@ -1,0 +1,8 @@
+epochs: 100
+lr: 0.001
+batch_size: 8192
+neg_ratio: 1
+split: transductive
+val_ratio: 0.1
+test_ratio: 0.2
+seed: 42

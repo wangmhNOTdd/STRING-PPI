@@ -18,9 +18,10 @@
 ```
 ppi-esm2-hgcn/
 ├─ data/
-│  ├─ raw/                 # 原始下载 (STRING .gz / .fa.gz)
-│  ├─ interim/             # 中间文件（映射、过滤前后对齐）
-│  └─ processed/           # 最终图与特征 (graph.pt / features.pt / splits.npz)
+│  └─ string/              # STRING 数据集
+│     ├─ raw/              # 原始下载 (STRING .gz / .fa.gz)
+│     ├─ interim/          # 中间文件（映射、过滤前后对齐）
+│     └─ processed/        # 最终图与特征 (graph.pt / features.pt / splits.npz)
 ├─ models/
 │  ├─ manifolds/           # Poincaré/Hyperboloid ops (expmap/logmap/Möbius 等)
 │  ├─ layers/              # HGCN 层实现
@@ -79,8 +80,8 @@ ppi-esm2-hgcn/
 ### 5.2 预处理与对齐（过滤 + ID 映射 + 序列对齐）
 ```bash
 python src/preprocess_string.py \
-  --raw_dir data/raw \
-  --interim_dir data/interim \
+  --raw_dir data/string/raw \
+  --interim_dir data/string/interim \
   --min_score 700 \
   --map_to preferred_name \
   --drop_no_sequence
@@ -95,11 +96,11 @@ python src/preprocess_string.py \
 ### 5.3 生成 ESM2 序列表征
 ```bash
 python src/embed_esm2.py \
-  --fasta data/interim/seqs.fasta \
+  --fasta data/string/interim/seqs.fasta \
   --esm2_variant esm2_t33_650M_UR50D \
   --batch_size 4 \
   --fp16 \
-  --out_npz data/processed/esm2_features.npz
+  --out_npz data/string/processed/esm2_features.npz
 ```
 - 默认采用 **[CLS] token 表征** 或 **mean-pooling**（可配置）；    
 - 保留 `id -> feature` 的顺序与映射。
@@ -107,14 +108,14 @@ python src/embed_esm2.py \
 ### 5.4 构图与负采样 + 数据划分
 ```bash
 python src/build_graph.py \
-  --nodes data/interim/nodes.tsv \
-  --edges data/interim/edges.tsv \
-  --features data/processed/esm2_features.npz \
+  --nodes data/string/interim/nodes.tsv \
+  --edges data/string/interim/edges.tsv \
+  --features data/string/processed/esm2_features.npz \
   --neg_ratio 1 \
   --split transductive \
   --val_ratio 0.1 \
   --test_ratio 0.2 \
-  --out_dir data/processed
+  --out_dir data/string/processed
 ```
 - **负采样**：默认按 1:1 负样本，支持
   - **随机非边采样**（默认）
@@ -160,7 +161,7 @@ python src/build_graph.py \
 ```bash
 python src/train.py \
   --config configs/model.yaml \
-  --data_dir data/processed \
+  --data_dir data/string/processed \
   --epochs 100 \
   --lr 1e-3 \
   --batch_size 8192 \
@@ -173,7 +174,7 @@ python src/train.py \
 ### 7.2 评测
 ```bash
 python src/evaluate.py \
-  --data_dir data/processed \
+  --data_dir data/string/processed \
   --ckpt runs/hgcn_esm2_700/best.pt \
   --metrics auroc aupr f1@0.5 \
   --report reports/hgcn_esm2_700.json
@@ -202,9 +203,9 @@ python src/evaluate.py \
 species: 9606
 min_score: 700
 paths:
-  raw: data/raw
-  interim: data/interim
-  processed: data/processed
+  raw: data/string/raw
+  interim: data/string/interim
+  processed: data/string/processed
 mapping:
   prefer_id: ensp         # 或 preferred_name / uniprot，需与 FASTA 对齐
 dedup: true
@@ -250,22 +251,22 @@ seed: 42
 
 ```bash
 # 1) Download
-python src/download_string.py --species 9606 --out_dir data/raw
+python src/download_string.py --species 9606 --out_dir data/string/raw
 
 # 2) Preprocess
-python src/preprocess_string.py --raw_dir data/raw --interim_dir data/interim --min_score 900 --map_to ensp --drop_no_sequence
+python src/preprocess_string.py --raw_dir data/string/raw --interim_dir data/string/interim --min_score 900 --map_to ensp --drop_no_sequence
 
 # 3) ESM2 embeddings
-python src/embed_esm2.py --fasta data/interim/seqs.fasta --esm2_variant esm2_t12_35M_UR50D --batch_size 16 --fp16 --out_npz data/processed/esm2_features.npz
+python src/embed_esm2.py --fasta data/string/interim/seqs.fasta --esm2_variant esm2_t12_35M_UR50D --batch_size 16 --fp16 --out_npz data/string/processed/esm2_features.npz
 
 # 4) Build graph & splits
-python src/build_graph.py --nodes data/interim/nodes.tsv --edges data/interim/edges.tsv --features data/processed/esm2_features.npz --neg_ratio 1 --split transductive --val_ratio 0.1 --test_ratio 0.2 --out_dir data/processed
+python src/build_graph.py --nodes data/string/interim/nodes.tsv --edges data/string/interim/edges.tsv --features data/string/processed/esm2_features.npz --neg_ratio 1 --split transductive --val_ratio 0.1 --test_ratio 0.2 --out_dir data/string/processed
 
 # 5) Train HGCN
-python src/train.py --config configs/model.yaml --data_dir data/processed --epochs 100 --lr 1e-3 --batch_size 8192 --model hgcn --decoder hyp_distance --log_dir runs/hgcn_esm2_700
+python src/train.py --config configs/model.yaml --data_dir data/string/processed --epochs 100 --lr 1e-3 --batch_size 8192 --model hgcn --decoder hyp_distance --log_dir runs/hgcn_esm2_700
 
 # 6) Evaluate
-python src/evaluate.py --data_dir data/processed --ckpt runs/hgcn_esm2_700/best.pt --metrics auroc aupr f1@0.5 --report reports/hgcn_esm2_700.json
+python src/evaluate.py --data_dir data/string/processed --ckpt runs/hgcn_esm2_700/best.pt --metrics auroc aupr f1@0.5 --report reports/hgcn_esm2_700.json
 ```
 
 ---

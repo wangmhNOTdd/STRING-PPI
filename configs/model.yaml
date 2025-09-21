@@ -1,0 +1,9 @@
+model: hgcn
+manifold: poincare
+dim: 128
+layers: 2
+curvature:
+  learnable: true
+  init: 1.0
+dropout: 0.1
+decoder: hyp_distance

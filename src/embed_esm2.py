@@ -56,7 +56,9 @@ def generate_embeddings(sequences, tokenizer, model, batch_size=1, pooling='mean
         batch_seqs = [sequences[seq_id] for seq_id in batch_ids]
 
         # Tokenize sequences
-        encoded = tokenizer(batch_seqs, return_tensors="pt", padding=True, truncation=True)
+        # Truncate sequences to maximum effective length of 1022 amino acids
+        batch_seqs_truncated = [seq[:1022] for seq in batch_seqs]
+        encoded = tokenizer(batch_seqs_truncated, return_tensors="pt", padding=True, truncation=True)
         encoded = {k: v.to(device) for k, v in encoded.items()}
 
         # Generate embeddings

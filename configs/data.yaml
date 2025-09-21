@@ -1,0 +1,10 @@
+species: 9606
+min_score: 700
+paths:
+  raw: data/string/raw
+  interim: data/string/interim
+  processed: data/string/processed
+mapping:
+  prefer_id: ensp
+dedup: true
+drop_no_sequence: true
