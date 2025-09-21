@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+!/usr/bin/env python3
 """
 Generate ESM2 embeddings for protein sequences.
 """
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size (default: 1)")
     parser.add_argument("--pooling", choices=["mean", "cls"], default="mean",
                         help="Pooling method (default: mean)")
-    parser.add_argument("--device", default="cpu", help="Device to use (default: cpu)")
+    parser.add_argument("--device", default="cuda", help="Device to use (default: cpu)")
     parser.add_argument("--out_npz", required=True, help="Output .npz file")
 
     args = parser.parse_args()
