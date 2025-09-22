@@ -73,8 +73,9 @@ def save_outputs(nodes_df: pd.DataFrame, edges_df: pd.DataFrame, seq_df: pd.Data
 def main(actions_file: str,
          seqs_dict_file: str,
          interim_dir: str,
-         min_score: int = 700,
-         drop_no_sequence: bool = True):
+         min_score: int | None = 700,
+         drop_no_sequence: bool = True,
+         no_score_filter: bool = False):
     actions_path = Path(actions_file)
     seqs_path = Path(seqs_dict_file)
     interim_path = Path(interim_dir)
@@ -83,10 +84,12 @@ def main(actions_file: str,
     edges_df = read_actions(actions_path)
     print(f"Loaded {len(edges_df)} unique undirected pairs")
 
-    if min_score is not None:
+    if not no_score_filter and min_score is not None:
         before = len(edges_df)
         edges_df = edges_df[edges_df['combined_score'] >= min_score].reset_index(drop=True)
         print(f"Filtered by combined_score >= {min_score}: {before} -> {len(edges_df)}")
+    else:
+        print("No score filtering applied (using all edges)")
 
     print("Reading sequence dictionary...")
     seq_df = read_seq_dict(seqs_path)
@@ -118,8 +121,9 @@ if __name__ == '__main__':
     parser.add_argument('--seqs_dict_file', default='data/SHS27K/raw/protein.SHS27k.sequences.dictionary.tsv',
         help='Path to SHS27K sequences dictionary (TSV, no header)')
     parser.add_argument('--interim_dir', default='data/SHS27K/interim', help='Directory to write outputs')
-    parser.add_argument('--min_score', type=int, default=700, help='Minimum combined_score threshold')
+    parser.add_argument('--min_score', type=int, default=700, help='Minimum combined_score threshold (ignored if --no_score_filter)')
     parser.add_argument('--drop_no_sequence', action='store_true', help='Drop edges without both sequences')
+    parser.add_argument('--no_score_filter', action='store_true', help='Do not filter by combined_score')
 
     args = parser.parse_args()
-    main(args.actions_file, args.seqs_dict_file, args.interim_dir, args.min_score, args.drop_no_sequence)
+    main(args.actions_file, args.seqs_dict_file, args.interim_dir, args.min_score, args.drop_no_sequence, args.no_score_filter)

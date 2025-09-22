@@ -100,7 +100,8 @@ def negative_sampling(edges_df, num_nodes, neg_ratio=1):
 
 def split_data(data, split_type='transductive', val_ratio=0.1, test_ratio=0.2):
     """Split data into train/val/test sets"""
-    num_edges = data.edge_index.size(1) // 2  # Divide by 2 because of undirected edges
+    # Here edge_index contains only positive edges duplicated in both directions.
+    num_edges = data.edge_index.size(1) // 2
     edge_indices = list(range(num_edges))
 
     if split_type == 'transductive':
@@ -162,6 +163,61 @@ def split_data(data, split_type='transductive', val_ratio=0.1, test_ratio=0.2):
         data.val_mask = val_mask
         data.test_mask = test_mask
 
+    elif split_type == 'dfs':
+        # DFS-based ordering on the undirected positive edge set, then split by order
+        num_nodes = data.x.size(0)
+        # Build simple undirected graph from the first half of edges
+        G = nx.Graph()
+        G.add_nodes_from(range(num_nodes))
+        edge_list = [(int(data.edge_index[0, i]), int(data.edge_index[1, i])) for i in range(num_edges)]
+        G.add_edges_from(edge_list)
+
+        # Compute DFS discovery order for nodes across components
+        order = {}
+        t = 0
+        for start in range(num_nodes):
+            if start not in order and G.has_node(start):
+                for u in nx.dfs_preorder_nodes(G, source=start):
+                    if u not in order:
+                        order[u] = t
+                        t += 1
+        # Fallback for isolated nodes
+        for u in range(num_nodes):
+            if u not in order:
+                order[u] = t
+                t += 1
+
+        # Rank edges by min discovery time of endpoints
+        ranked = sorted(range(num_edges), key=lambda i: min(order[int(data.edge_index[0, i])], order[int(data.edge_index[1, i])]))
+
+        n_total = len(ranked)
+        n_test = int(round(n_total * test_ratio))
+        n_val = int(round(n_total * val_ratio))
+        n_train = n_total - n_val - n_test
+
+        train_idx = set(ranked[:n_train])
+        val_idx = set(ranked[n_train:n_train + n_val])
+        test_idx = set(ranked[n_train + n_val:])
+
+        train_mask = torch.zeros(num_edges * 2, dtype=torch.bool)
+        val_mask = torch.zeros(num_edges * 2, dtype=torch.bool)
+        test_mask = torch.zeros(num_edges * 2, dtype=torch.bool)
+
+        for i in range(num_edges):
+            if i in train_idx:
+                train_mask[i] = True
+                train_mask[i + num_edges] = True
+            elif i in val_idx:
+                val_mask[i] = True
+                val_mask[i + num_edges] = True
+            else:
+                test_mask[i] = True
+                test_mask[i + num_edges] = True
+
+        data.train_mask = train_mask
+        data.val_mask = val_mask
+        data.test_mask = test_mask
+
     return data
 
 
@@ -187,16 +243,9 @@ def main(nodes_file, edges_file, features_file, neg_ratio=1, split='transductive
     edges_df['idx1'] = edges_df['protein1'].map(node_id_to_idx)
     edges_df['idx2'] = edges_df['protein2'].map(node_id_to_idx)
 
-    print("Performing negative sampling...")
-    neg_edge_index = negative_sampling(edges_df, len(node_ids), neg_ratio)
-    print(f"Generated {neg_edge_index.size(1)} negative edges")
-
     print("Creating graph...")
     data, node_id_to_idx = create_graph(nodes_df, edges_df, features)
     print(f"Created graph with {data.x.size(0)} nodes and {data.edge_index.size(1)} edges")
-
-    # Combine positive and negative edges
-    data.edge_index = torch.cat([data.edge_index, neg_edge_index], dim=1)
 
     print("Splitting data...")
     data = split_data(data, split, val_ratio, test_ratio)
@@ -217,7 +266,7 @@ if __name__ == '__main__':
     parser.add_argument('--edges', required=True, help='Edges TSV file')
     parser.add_argument('--features', required=True, help='ESM2 features NPZ file')
     parser.add_argument('--neg_ratio', type=float, default=1, help='Negative sampling ratio')
-    parser.add_argument('--split', choices=['transductive', 'inductive'], default='transductive',
+    parser.add_argument('--split', choices=['transductive', 'inductive', 'dfs'], default='transductive',
                         help='Data split strategy')
     parser.add_argument('--val_ratio', type=float, default=0.1, help='Validation set ratio')
     parser.add_argument('--test_ratio', type=float, default=0.2, help='Test set ratio')
